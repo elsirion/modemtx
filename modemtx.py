@@ -3,22 +3,27 @@ from subprocess import Popen, PIPE
 from requests import post
 
 API = "https://blockstream.info/testnet/api/tx"
-CHARSET = b"0123456789ABCDEF"
+CHARSET = b"0123456789ABCDEFabcdef"
+SEPARATOR = "DEADBEEF"
 
 def send_tx(tx: str, baud: str):
     modem = Popen(['minimodem', str(baud), '--tx'], stdout=PIPE, stdin=PIPE, stderr=PIPE)
-    stdinBytes = bytes("{}\n".format(tx), "UTF-8")
+    stdinBytes = bytes("012345{}{}\n".format(SEPARATOR, tx), "UTF-8")
     modem.communicate(input=stdinBytes)
     modem.kill()
 
 def listen_tx(baud: str):
     modem = Popen(['minimodem', str(baud), '--rx'], stdout=PIPE, stdin=PIPE, stderr=PIPE)
     while True:
-        tx = modem.stdout.readline()
-        filteredTx = "".join([chr(c) for c in tx if c in CHARSET])
-        print("received filtered transaction: {}".format(filteredTx))
-        result = post(API, data=filteredTx)
-        print("response: {}".format(result.text))
+        try:
+            tx = modem.stdout.readline()
+            filteredTx = "".join([chr(c) for c in tx if c in CHARSET])
+            unprefixedFilteredTx = filteredTx.split(SEPARATOR)[1]
+            print("received filtered transaction: {}".format(unprefixedFilteredTx))
+            result = post(API, data=unprefixedFilteredTx)
+            print("response: {}".format(result.text))
+        except IndexError:
+            print("No separator found")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sender and transmit Bitcoin transactions via audio channels')
